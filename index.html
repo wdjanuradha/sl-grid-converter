@@ -239,23 +239,35 @@ function convert(){
   el('copy-gmap').onclick=()=>{ if(last.gmap) copyToClipboard(last.gmap); else alert('No map link'); };
 }
 
-// ------------------- Reverse GR Conversion -------------------
+// ------------------- Reverse GR Conversion (Corrected) -------------------
 function reverseGR(){
   const gr=el('input-gr').value.trim();
   if(!gr.match(/^\d{6,8}$/)){alert('Enter valid 6 or 8 figure GR'); return;}
-  const figures=gr.length;
+  const figures=gr.length; // 6 or 8
   const d=figures/2;
   const ePart=parseInt(gr.substring(0,d),10);
   const nPart=parseInt(gr.substring(d),10);
-  const unit=100000 / (10**d); // 100m for 6-fig, 10m for 8-fig
+
+  const unit=Math.pow(10,5-d); // 100m for 6-fig, 10m for 8-fig
   const type=el('gr-type').value;
-  const falseE=200000; const falseN=200000;
-  const easting=falseE + ePart * unit;
-  const northing=falseN + nPart * unit;
+  const falseE=200000; 
+  const falseN=200000;
+
+  // Correct formula: multiply part by unit and add half unit for center of square
+  const easting=falseE + ePart*unit + unit/2;
+  const northing=falseN + nPart*unit + unit/2;
+
   const proj=(type==='kandawala')?'EPSG:5235':'EPSG:5234';
   const [lon,lat]=proj4(proj,'EPSG:4326',[easting,northing]);
+
   el('gr-output').textContent=`Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
   renderMap(lat,lon);
+
+  // Save last for copy buttons
+  last.easting=Math.round(easting);
+  last.northing=Math.round(northing);
+  last.gr=gr;
+  last.gmap=gmapLink(lat,lon);
 }
 
 el('convert').addEventListener('click',convert);
