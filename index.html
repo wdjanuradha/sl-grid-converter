@@ -129,3 +129,166 @@ footer{margin-top:14px;color:var(--muted);font-size:13px}
           </div>
 
           <hr style="border:none
+            ;border-top:1px solid rgba(255,255,255,0.03);margin:10px 0" />
+          <div class="label">Map preview</div>
+          <div id="mapwrap" style="margin-top:8px;border-radius:8px;overflow:hidden;background:#071425;height:220px;display:flex;align-items:center;justify-content:center;color:var(--muted)">No point yet</div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="output">
+      <div id="out-wgs" class="card-small">
+        <div class="label">WGS84 Input</div>
+        <div class="value" id="wgs-lat">—</div>
+        <div class="small muted" id="wgs-lon">—</div>
+      </div>
+
+      <div id="out-grids" class="grid cols-3"></div>
+    </div>
+
+    <footer>
+      <div class="small muted">Built with <a href="https://proj4js.org/" target="_blank">proj4js</a>. Tactical version with forward and reverse GR conversion.</div>
+    </footer>
+  </div>
+</div>
+
+<script>
+// ------------------- Projection definitions -------------------
+proj4.defs("EPSG:5235", "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +a=6377276.345 +rf=300.8017 +units=m +no_defs +towgs84=-97,787,86,0,0,0,0");
+proj4.defs("EPSG:5234", "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +ellps=GRS80 +units=m +no_defs");
+proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+proj4.defs("EPSG:32644", "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs");
+
+// ------------------- Utilities -------------------
+function parseDMS(input){
+  if(!input && input !==0) return NaN;
+  const s=String(input).trim();
+  if(/^[-+]?\d+(?:\.\d+)?$/.test(s)) return parseFloat(s);
+  const dms=s.match(/^(\d{1,3})(?:°|\s|:)?\s*(\d{1,2})?(?:'|\s|:)?\s*(\d{1,2}(?:\.\d+)?)?\s*(?:"|\s)?\s*([NnSsEeWw])?$/);
+  if(!dms) return NaN;
+  const deg=parseFloat(dms[1])||0;
+  const min=dms[2]?parseFloat(dms[2]):0;
+  const sec=dms[3]?parseFloat(dms[3]):0;
+  const dir=dms[4]?dms[4].toUpperCase():null;
+  let dd=Math.abs(deg)+(min/60)+(sec/3600);
+  if(deg<0) dd=-dd;
+  if(dir){ if(dir==='S'||dir==='W') dd=-Math.abs(dd); }
+  return dd;
+}
+
+function fmt(n,dp=0){ if(!isFinite(n)) return '—'; return Number(n).toLocaleString(undefined,{minimumFractionDigits:dp, maximumFractionDigits:dp}); }
+
+function makeGridRef(easting,northing,figures){
+  const d=figures/2;
+  const divisor=Math.pow(10,5-d);
+  const mod=Math.pow(10,d);
+  const ePartNum=Math.floor(easting/divisor)%mod;
+  const nPartNum=Math.floor(northing/divisor)%mod;
+  const ePart=String(ePartNum).padStart(d,'0');
+  const nPart=String(nPartNum).padStart(d,'0');
+  return {gr:`GR ${ePart}${nPart}`, ePart, nPart, d};
+}
+
+function gmapLink(lat,lon){ return `https://maps.google.com/?q=${lat},${lon}`; }
+function gmapEmbed(lat,lon){ return `https://maps.google.com/maps?q=${lat},${lon}&output=embed`; }
+
+const el=id=>document.getElementById(id);
+const outWgsLat=el('wgs-lat');
+const outWgsLon=el('wgs-lon');
+const outGrids=el('out-grids');
+const mapWrap=el('mapwrap');
+
+let last={gr:'', easting:null, northing:null, gmap:''};
+
+function clear(){
+  el('lat').value='';
+  el('lon').value='';
+  outWgsLat.textContent='—';
+  outWgsLon.textContent='—';
+  outGrids.innerHTML='';
+  mapWrap.textContent='No point yet';
+  mapWrap.style.background='';
+  last={gr:'', easting:null, northing:null, gmap:''};
+}
+
+function copyToClipboard(text){ navigator.clipboard.writeText(text).catch(()=>alert('Copy failed — copy manually')); }
+
+function renderMap(lat,lon){ mapWrap.innerHTML=`<iframe title="map" width="100%" height="100%" frameborder="0" style="border:0" src="${gmapEmbed(lat,lon)}" allowfullscreen></iframe>`; }
+
+// ------------------- Forward Conversion -------------------
+function convert(){
+  const lat=parseDMS(el('lat').value.trim());
+  const lon=parseDMS(el('lon').value.trim());
+  if(!isFinite(lat)||!isFinite(lon)){alert('Enter valid Latitude and Longitude'); return;}
+
+  const kand=proj4('EPSG:4326','EPSG:5235',[lon,lat]);
+  const sld=proj4('EPSG:4326','EPSG:5234',[lon,lat]);
+  const utm=proj4('EPSG:4326','EPSG:32644',[lon,lat]);
+
+  const figures=parseInt(document.querySelector('input[name="precision"]:checked').value,10);
+  const kandGr=makeGridRef(Math.round(kand[0]), Math.round(kand[1]), figures);
+
+  outGrids.innerHTML='';
+  function cardHTML(title, tag, easting, northing, grObj, lat, lon){
+    return `
+      <div class="card-small">
+        <div class="label">${title} <span class="small muted">${tag}</span></div>
+        <div style="margin-top:8px">
+          <div class="label">Easting</div>
+          <div class="value">${fmt(easting,0)} m → <span class="gr">${grObj?grObj.ePart:'—'}</span></div>
+          <div class="label" style="margin-top:6px">Northing</div>
+          <div class="value">${fmt(northing,0)} m → <span class="gr">${grObj?grObj.nPart:'—'}</span></div>
+          <div style="margin-top:8px"><span class="label">Grid Reference (${figures}-figure)</span>
+            <div class="gr">${grObj?grObj.gr:'—'}</div></div>
+          <div style="margin-top:8px" class="small muted"> <a target="_blank" href="${gmapLink(lat,lon)}">Open in Google Maps</a> </div>
+        </div>
+      </div>
+    `;
+  }
+  outGrids.insertAdjacentHTML('beforeend', cardHTML('Kandawala / Sri Lanka Grid','EPSG:5235', kand[0], kand[1], kandGr, lat, lon));
+  outGrids.insertAdjacentHTML('beforeend', cardHTML('SLD99 / Sri Lanka Grid 1999','EPSG:5234', sld[0], sld[1], null, lat, lon));
+  outGrids.insertAdjacentHTML('beforeend', cardHTML('UTM Zone 44N (WGS84)','EPSG:32644', utm[0], utm[1], null, lat, lon));
+
+  outWgsLat.textContent=`Lat ${lat.toFixed(6)}`;
+  outWgsLon.textContent=`Lon ${lon.toFixed(6)}`;
+  renderMap(lat,lon);
+
+  last.easting=Math.round(kand[0]); last.northing=Math.round(kand[1]); last.gr=kandGr.gr; last.gmap=gmapLink(lat,lon);
+
+  el('copy-gr').onclick=()=>{ if(last.gr) copyToClipboard(last.gr); else alert('No GR'); };
+  el('copy-xy').onclick=()=>{ if(last.easting!==null) copyToClipboard(`${last.easting}, ${last.northing}`); else alert('No coordinates'); };
+  el('copy-gmap').onclick=()=>{ if(last.gmap) copyToClipboard(last.gmap); else alert('No map link'); };
+}
+
+// ------------------- Reverse GR -------------------
+function reverseGR(){
+  const gr=el('input-gr').value.trim();
+  if(!gr.match(/^\d{6,8}$/)){alert('Enter valid 6 or 8 figure GR'); return;}
+  const figures=gr.length;
+  const d=figures/2;
+  const ePart=parseInt(gr.substring(0,d),10);
+  const nPart=parseInt(gr.substring(d),10);
+  const multiplier=Math.pow(10,5-d);
+
+  const type=el('gr-type').value;
+  const falseE=200000;
+  const falseN=200000;
+  const easting=falseE+ePart*multiplier;
+  const northing=falseN+nPart*multiplier;
+
+  const proj=(type==='kandawala')?'EPSG:5235':'EPSG:5234';
+  const [lon,lat]=proj4(proj,'EPSG:4326',[easting,northing]);
+
+  el('gr-output').textContent=`Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
+  renderMap(lat,lon);
+}
+
+el('convert').addEventListener('click',convert);
+el('clear').addEventListener('click',clear);
+el('convert-gr').addEventListener('click',reverseGR);
+
+clear();
+</script>
+</body>
+</html>
+
