@@ -50,10 +50,19 @@
         </div>
       </div>
 
+      <div style="margin-top:12px">
+        <label>Select Grid Reference Precision</label>
+        <div class="row">
+          <label><input type="radio" name="grformat" value="4"/> 4-figure</label>
+          <label><input type="radio" name="grformat" value="6" checked/> 6-figure</label>
+          <label><input type="radio" name="grformat" value="8"/> 8-figure</label>
+        </div>
+      </div>
+
       <div class="row" style="margin-top:12px">
         <button id="convert" class="btn">Convert</button>
         <button id="swap" class="btn secondary" title="Swap input/output">Swap ↔</button>
-        <span class="note">WGS84 input → Kandawala (EPSG:5235) & SLD99 (EPSG:5234) & UTM 44N (EPSG:32644)</span>
+        <span class="note">WGS84 input → Kandawala, SLD99, UTM, plus GR format</span>
       </div>
 
       <div id="out" style="margin-top:18px" class="grid grid-3"></div>
@@ -75,42 +84,24 @@
   </div>
 
   <script>
-    // --- CRS definitions ---
-    // EPSG:5235 — Kandawala / Sri Lanka Grid (Everest 1830 (1937 adj.))
     proj4.defs("EPSG:5235",
-      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 " +
-      "+a=6377276.345 +rf=300.8017 +units=m +no_defs +towgs84=-97,787,86,0,0,0,0");
-
-    // EPSG:5234 — SLD99 / Sri Lanka Grid 1999 (GRS80/WGS84)
+      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +a=6377276.345 +rf=300.8017 +units=m +no_defs +towgs84=-97,787,86,0,0,0,0");
     proj4.defs("EPSG:5234",
-      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 " +
-      "+ellps=GRS80 +units=m +no_defs");
-
-    // EPSG:4326 — WGS84 geographic
+      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +ellps=GRS80 +units=m +no_defs");
     proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
-
-    // EPSG:32644 — WGS84 / UTM zone 44N
     proj4.defs("EPSG:32644", "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs");
 
-    // --- Helpers ---
     function parseDMS(input){
       if(!input) return NaN;
       const s = String(input).trim();
-      // If looks like pure decimal
       if(/^[-+]?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
-      // Replace degree, minute, second symbols with spaces and N/S/E/W handling
-      const r = s
-        .replace(/°|º|deg/gi,' ')
-        .replace(/'/g,' ')
-        .replace(/"|”|″/g,' ')
-        .replace(/\s+/g,' ') // collapse
-        .trim();
+      const r = s.replace(/°|º|deg/gi,' ').replace(/'/g,' ').replace(/\"|”|″/g,' ').replace(/\s+/g,' ').trim();
       const parts = r.match(/([-+]?\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)/);
       const hemi = s.match(/[NSEW]/i);
       if(!parts) return NaN;
       let deg = parseFloat(parts[1]), min = parseFloat(parts[2]), sec = parseFloat(parts[3]);
       let dd = Math.abs(deg) + (min/60) + (sec/3600);
-      if(deg < 0) dd *= -1; // keep explicit minus if provided
+      if(deg < 0) dd *= -1;
       if(hemi){
         const h = hemi[0].toUpperCase();
         if(h==='S' || h==='W') dd = -Math.abs(dd);
@@ -124,9 +115,20 @@
       return n.toLocaleString(undefined,{maximumFractionDigits:decimals, minimumFractionDigits:decimals});
     }
 
-    function toOutCard(title, x, y, tag){
-      const id = Math.random().toString(36).slice(2,8);
-      const html = `
+    function toOutCard(title, x, y, tag, lat, lon){
+      const grformat = document.querySelector('input[name="grformat"]:checked').value;
+      let GR = '';
+      try {
+        const e = Math.floor(x % 1000000); // strip 100km zone
+        const n = Math.floor(y % 1000000);
+        let eStr = String(Math.floor(e/Math.pow(10,6-grformat/2))).padStart(grformat/2,'0');
+        let nStr = String(Math.floor(n/Math.pow(10,6-grformat/2))).padStart(grformat/2,'0');
+        GR = `GR ${eStr}${nStr}`;
+      } catch{}
+
+      const mapLink = lat && lon ? `<div style='margin-top:6px'><a target='_blank' href='https://maps.google.com/?q=${lat},${lon}'>View on Google Maps</a></div>` : '';
+
+      return `
         <div class="result">
           <div class="row"><strong>${title}</strong><span class="tag">${tag}</span></div>
           <div class="row" style="margin-top:10px">
@@ -137,8 +139,9 @@
             <div>Northing: <b>${fmt(y)}</b></div>
             <button class="copy" data-text="${Math.round(y)}">Copy N</button>
           </div>
+          <div style="margin-top:6px"><b>${GR}</b></div>
+          ${mapLink}
         </div>`;
-      return html;
     }
 
     function toOutLatLon(title, lat, lon){
@@ -149,6 +152,7 @@
             <button class="copy" data-text="${lat.toFixed(6)}, ${lon.toFixed(6)}">Copy</button></div>
           <div class="row" style="margin-top:6px"><div>Lon: <b>${lon.toFixed(6)}</b></div>
             <button class="copy" data-text="${lon.toFixed(6)}">Copy Lon</button></div>
+          <div style='margin-top:6px'><a target='_blank' href='https://maps.google.com/?q=${lat},${lon}'>View on Google Maps</a></div>
         </div>`;
       return html;
     }
@@ -172,12 +176,11 @@
       const out = document.getElementById('out');
       out.innerHTML = [
         toOutLatLon('WGS84 Input', latDD, lonDD),
-        toOutCard('Kandawala / Sri Lanka Grid', kandXY[0], kandXY[1], 'EPSG:5235'),
-        toOutCard('SLD99 / Sri Lanka Grid 1999', sldXY[0], sldXY[1], 'EPSG:5234'),
-        toOutCard('UTM Zone 44N (WGS84)', utmXY[0], utmXY[1], 'EPSG:32644')
+        toOutCard('Kandawala / Sri Lanka Grid', kandXY[0], kandXY[1], 'EPSG:5235', latDD, lonDD),
+        toOutCard('SLD99 / Sri Lanka Grid 1999', sldXY[0], sldXY[1], 'EPSG:5234', latDD, lonDD),
+        toOutCard('UTM Zone 44N (WGS84)', utmXY[0], utmXY[1], 'EPSG:32644', latDD, lonDD)
       ].join('');
 
-      // attach copy handlers
       out.querySelectorAll('.copy').forEach(btn=>{
         btn.onclick = () => {
           const text = btn.getAttribute('data-text');
@@ -189,12 +192,7 @@
       });
     }
 
-    function swap(){
-      // If output exists, try reading Kandawala numbers back to inputs (simple helper)
-      const e = document.querySelector('#out .result:nth-child(2)');
-      if(!e){return;}
-      alert('Swap is a placeholder here. This demo focuses on Lat/Lon → Grid.');
-    }
+    function swap(){ alert('Swap is a placeholder. This demo focuses on Lat/Lon → Grid.'); }
 
     document.getElementById('convert').addEventListener('click', convert);
     document.getElementById('swap').addEventListener('click', swap);
