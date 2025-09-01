@@ -173,16 +173,21 @@ function parseDMS(input){
   return dd;
 }
 function fmt(n,dp=0){ if(!isFinite(n)) return '—'; return Number(n).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
+
+// ------------------- Grid Reference Logic -------------------
 function makeGridRef(easting,northing,figures){
   const d=figures/2;
-  const divisor=Math.pow(10,5-d);
-  const mod=Math.pow(10,d);
-  const ePartNum=Math.floor((easting-200000)/divisor)%mod;
-  const nPartNum=Math.floor((northing-200000)/divisor)%mod;
-  const ePart=String(ePartNum).padStart(d,'0');
-  const nPart=String(nPartNum).padStart(d,'0');
+  const divisor = Math.pow(10,5-d); // 1000,100,10
+  const falseE = 200000;
+  const falseN = 200000;
+  const ePartNum = Math.floor((easting-falseE)/divisor);
+  const nPartNum = Math.floor((northing-falseN)/divisor);
+  const ePart = String(ePartNum).padStart(d,'0');
+  const nPart = String(nPartNum).padStart(d,'0');
   return {gr:`GR ${ePart}${nPart}`,ePart,nPart,d};
 }
+
+// ------------------- Map Helpers -------------------
 function gmapLink(lat,lon){ return `https://maps.google.com/?q=${lat},${lon}`; }
 function gmapEmbed(lat,lon){ return `https://maps.google.com/maps?q=${lat},${lon}&output=embed`; }
 
@@ -239,28 +244,26 @@ function convert(){
   el('copy-gmap').onclick=()=>{ if(last.gmap) copyToClipboard(last.gmap); else alert('No map link'); };
 }
 
-// ------------------- Reverse GR Conversion (4/6/8-figure) -------------------
+// ------------------- Reverse GR Conversion -------------------
 function reverseGR(){
   const gr=el('input-gr').value.trim();
-  if(!gr.match(/^\d{4,8}$/)){alert('Enter valid 4, 6, or 8 figure GR'); return;}
+  if(!gr.match(/^\d{4,8}$/)){alert('Enter valid 4,6,8 figure GR'); return;}
   const figures = gr.length;
   const d = figures / 2;
   const ePart = parseInt(gr.substring(0,d),10);
   const nPart = parseInt(gr.substring(d),10);
 
-  const divisor = Math.pow(10,5-d); // grid spacing
   const falseE = 200000;
   const falseN = 200000;
-
-  // Center of grid square
-  const easting = falseE + ePart * divisor + divisor/2;
-  const northing = falseN + nPart * divisor + divisor/2;
+  const divisor = Math.pow(10,5-d); // spacing of grid square
+  const easting = falseE + ePart*divisor + divisor/2;
+  const northing = falseN + nPart*divisor + divisor/2;
 
   const type = el('gr-type').value;
-  const proj = (type==='kandawala') ? 'EPSG:5235' : 'EPSG:5234';
+  const proj = (type==='kandawala')?'EPSG:5235':'EPSG:5234';
+  const [lon,lat] = proj4(proj,'EPSG:4326',[easting,northing]);
 
-  const [lon, lat] = proj4(proj,'EPSG:4326',[easting,northing]);
-  el('gr-output').textContent = `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
+  el('gr-output').textContent=`Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
   renderMap(lat,lon);
 
   last.easting = Math.round(easting);
@@ -274,7 +277,6 @@ el('convert').addEventListener('click',convert);
 el('clear').addEventListener('click',clear);
 el('convert-gr').addEventListener('click',reverseGR);
 
-// initialize
 clear();
 </script>
 </body>
