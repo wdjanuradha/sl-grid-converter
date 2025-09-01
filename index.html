@@ -1,201 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
   <title>Sri Lanka Grid Converter</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
   <style>
-    :root { --bg:#0b1220; --card:#111a2e; --muted:#93a1b0; --text:#e6edf3; --accent:#5ab0ff; }
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1220,#0a0f1a);} 
-    .wrap{max-width:980px;margin:40px auto;padding:24px}
-    .card{background:var(--card);color:var(--text);border:1px solid #1f2a44;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-    .head{padding:18px 22px;border-bottom:1px solid #1f2a44;display:flex;align-items:center;gap:12px}
-    h1{font-size:20px;margin:0;font-weight:700}
-    .body{padding:22px}
-    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select,button,textarea{font:inherit} 
-    .grid{display:grid;gap:14px}
-    @media(min-width:720px){.grid-2{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:repeat(3,1fr)}}
-    .field{background:#0c1426;border:1px solid #223052;border-radius:12px;padding:10px 12px;color:var(--text)}
-    .row{display:flex;gap:10px;align-items:center}
-    .btn{background:var(--accent);color:#041423;border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
-    .btn.secondary{background:#1b2a45;color:var(--text);border:1px solid #2a3b5f}
-    .note{font-size:12px;color:var(--muted)}
-    .result{background:#0c1426;border:1px dashed #2a3b5f;border-radius:12px;padding:12px}
-    .result .row{justify-content:space-between}
-    .tag{font-size:11px;color:#8fb7ff;background:#0e1b33;border:1px solid #234;
-         padding:2px 8px;border-radius:999px}
-    .copy{background:transparent;color:var(--accent);border:0;font-weight:700;cursor:pointer}
-    a{color:#7fc1ff}
-    .footer{color:var(--muted);font-size:12px;padding:18px 22px;border-top:1px solid #1f2a44}
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .result { margin-top: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+    label { display: block; margin-top: 10px; }
   </style>
-  <!-- proj4.js from CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.min.js"></script>
 </head>
 <body>
-  <div class="wrap card">
-    <div class="head">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.39 4.84L20 8l-4 3.9.95 5.53L12 15.77 7.05 17.43 8 13 4 9l5.61-.16L12 2z" stroke="#5ab0ff"/></svg>
-      <h1>Sri Lanka Grid Converter</h1>
-    </div>
-    <div class="body">
-      <div class="grid grid-2">
-        <div>
-          <label>Latitude (accepts DD like <b>8.597475</b> or DMS like <b>8°35'50.91"N</b>)</label>
-          <input id="lat" class="field" placeholder="8.597475 or 8°35'50.91\"N" />
-        </div>
-        <div>
-          <label>Longitude (accepts DD like <b>80.483883</b> or DMS like <b>80°29'1.98"E</b>)</label>
-          <input id="lon" class="field" placeholder="80.483883 or 80°29'1.98\"E" />
-        </div>
-      </div>
+  <h2>Sri Lanka Grid Converter</h2>
+  <p>Enter coordinates (Latitude, Longitude in decimal degrees or DMS)</p>
+  
+  <label>Latitude: <input type="text" id="lat" placeholder="e.g., 7.8731 or 7°52'23&quot;N"></label>
+  <label>Longitude: <input type="text" id="lon" placeholder="e.g., 80.7718 or 80°46'18&quot;E"></label>
+  
+  <button onclick="convert()">Convert</button>
+  
+  <label>Grid Reference Precision:</label>
+  <label><input type="radio" name="gr" value="4"> 4-figure</label>
+  <label><input type="radio" name="gr" value="6" checked> 6-figure</label>
+  <label><input type="radio" name="gr" value="8"> 8-figure</label>
 
-      <div style="margin-top:12px">
-        <label>Select Grid Reference Precision</label>
-        <div class="row">
-          <label><input type="radio" name="grformat" value="4"/> 4-figure</label>
-          <label><input type="radio" name="grformat" value="6" checked/> 6-figure</label>
-          <label><input type="radio" name="grformat" value="8"/> 8-figure</label>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:12px">
-        <button id="convert" class="btn">Convert</button>
-        <button id="swap" class="btn secondary" title="Swap input/output">Swap ↔</button>
-        <span class="note">WGS84 input → Kandawala, SLD99, UTM, plus GR format</span>
-      </div>
-
-      <div id="out" style="margin-top:18px" class="grid grid-3"></div>
-
-      <details style="margin-top:18px">
-        <summary class="note">Parameters used (for accuracy & transparency)</summary>
-        <div class="note" style="margin-top:8px;line-height:1.5">
-          <b>Kandawala / Sri Lanka Grid — EPSG:5235</b>: Transverse Mercator; <code>+lat_0=7</code>, <code>+lon_0=80.7717133333</code>, <code>+k=0.9999238418</code>, <code>+x_0=200000</code>, <code>+y_0=200000</code>, Everest 1830 (1937 adj.), <code>+towgs84=-97,787,86,0,0,0,0</code>.
-          <br/>
-          <b>SLD99 / Sri Lanka Grid 1999 — EPSG:5234</b>: Transverse Mercator; same projection constants; GRS80 ellipsoid.
-          <br/>
-          <b>UTM 44N — EPSG:32644</b>: WGS84 UTM zone 44N.
-        </div>
-      </details>
-    </div>
-    <div class="footer">
-      Built with <a href="https://github.com/proj4js/proj4js">proj4js</a>. Copy or fork to GitHub and enable GitHub Pages to publish as a web app.
-    </div>
-  </div>
-
+  <div id="output" class="result"></div>
+  
   <script>
-    proj4.defs("EPSG:5235",
-      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +a=6377276.345 +rf=300.8017 +units=m +no_defs +towgs84=-97,787,86,0,0,0,0");
-    proj4.defs("EPSG:5234",
-      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 +ellps=GRS80 +units=m +no_defs");
-    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
-    proj4.defs("EPSG:32644", "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs");
+    // Define projections
+    const kandawala = "+proj=tmerc +lat_0=0 +lon_0=80.77171333333333 +k=1.000000 +x_0=200000 +y_0=200000 +ellps=evrst30 +units=m +no_defs";
+    const sld99 = "+proj=tmerc +lat_0=0 +lon_0=80.77166666666666 +k=0.9999238418 +x_0=200000 +y_0=200000 +ellps=WGS84 +towgs84=-0.293,766.95,87.713,0,0,0,0 +units=m +no_defs";
+    const utm44n = "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs";
 
-    function parseDMS(input){
-      if(!input) return NaN;
-      const s = String(input).trim();
-      if(/^[-+]?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
-      const r = s.replace(/°|º|deg/gi,' ').replace(/'/g,' ').replace(/\"|”|″/g,' ').replace(/\s+/g,' ').trim();
-      const parts = r.match(/([-+]?\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)/);
-      const hemi = s.match(/[NSEW]/i);
-      if(!parts) return NaN;
-      let deg = parseFloat(parts[1]), min = parseFloat(parts[2]), sec = parseFloat(parts[3]);
-      let dd = Math.abs(deg) + (min/60) + (sec/3600);
-      if(deg < 0) dd *= -1;
-      if(hemi){
-        const h = hemi[0].toUpperCase();
-        if(h==='S' || h==='W') dd = -Math.abs(dd);
-        if(h==='N' || h==='E') dd = Math.abs(dd);
-      }
-      return dd;
+    function parseDMS(input) {
+      if (!isNaN(input)) return parseFloat(input);
+      let parts = input.match(/(\d+)[°:\s](\d+)?[':\s]?([\d.]+)?\"?\s*([NSEW])?/i);
+      if (!parts) return NaN;
+      let deg = parseFloat(parts[1]) || 0;
+      let min = parseFloat(parts[2]) || 0;
+      let sec = parseFloat(parts[3]) || 0;
+      let dir = parts[4] || null;
+      let val = deg + (min/60) + (sec/3600);
+      if (dir && /SW/.test(dir.toUpperCase())) val *= -1;
+      return val;
     }
 
-    function fmt(n, decimals=0){
-      if(!isFinite(n)) return '—';
-      return n.toLocaleString(undefined,{maximumFractionDigits:decimals, minimumFractionDigits:decimals});
+    function makeGR(easting, northing, figures) {
+      // Remove 100 km grid square, keep last part
+      let e = Math.floor(easting % 100000);
+      let n = Math.floor(northing % 100000);
+
+      let digits = figures/2;
+      let eStr = Math.floor(e / Math.pow(10, 5-digits)).toString().padStart(digits, "0");
+      let nStr = Math.floor(n / Math.pow(10, 5-digits)).toString().padStart(digits, "0");
+
+      return { gr: `GR ${eStr}${nStr}`, eastPart: eStr, northPart: nStr };
     }
 
-    function toOutCard(title, x, y, tag, lat, lon){
-      const grformat = document.querySelector('input[name="grformat"]:checked').value;
-      let GR = '';
-      try {
-        const e = Math.floor(x % 1000000); // strip 100km zone
-        const n = Math.floor(y % 1000000);
-        let eStr = String(Math.floor(e/Math.pow(10,6-grformat/2))).padStart(grformat/2,'0');
-        let nStr = String(Math.floor(n/Math.pow(10,6-grformat/2))).padStart(grformat/2,'0');
-        GR = `GR ${eStr}${nStr}`;
-      } catch{}
+    function convert() {
+      let lat = parseDMS(document.getElementById("lat").value);
+      let lon = parseDMS(document.getElementById("lon").value);
 
-      const mapLink = lat && lon ? `<div style='margin-top:6px'><a target='_blank' href='https://maps.google.com/?q=${lat},${lon}'>View on Google Maps</a></div>` : '';
-
-      return `
-        <div class="result">
-          <div class="row"><strong>${title}</strong><span class="tag">${tag}</span></div>
-          <div class="row" style="margin-top:10px">
-            <div>Easting: <b>${fmt(x)}</b></div>
-            <button class="copy" data-text="${Math.round(x)} ${Math.round(y)}">Copy</button>
-          </div>
-          <div class="row" style="margin-top:6px">
-            <div>Northing: <b>${fmt(y)}</b></div>
-            <button class="copy" data-text="${Math.round(y)}">Copy N</button>
-          </div>
-          <div style="margin-top:6px"><b>${GR}</b></div>
-          ${mapLink}
-        </div>`;
-    }
-
-    function toOutLatLon(title, lat, lon){
-      const html = `
-        <div class="result">
-          <div class="row"><strong>${title}</strong><span class="tag">EPSG:4326</span></div>
-          <div class="row" style="margin-top:10px"><div>Lat: <b>${lat.toFixed(6)}</b></div>
-            <button class="copy" data-text="${lat.toFixed(6)}, ${lon.toFixed(6)}">Copy</button></div>
-          <div class="row" style="margin-top:6px"><div>Lon: <b>${lon.toFixed(6)}</b></div>
-            <button class="copy" data-text="${lon.toFixed(6)}">Copy Lon</button></div>
-          <div style='margin-top:6px'><a target='_blank' href='https://maps.google.com/?q=${lat},${lon}'>View on Google Maps</a></div>
-        </div>`;
-      return html;
-    }
-
-    function convert(){
-      const latDD = parseDMS(document.getElementById('lat').value);
-      const lonDD = parseDMS(document.getElementById('lon').value);
-      if(!isFinite(latDD) || !isFinite(lonDD)){
-        alert('Please enter valid Latitude and Longitude (decimal or DMS).');
+      if (isNaN(lat) || isNaN(lon)) {
+        document.getElementById("output").innerHTML = "Invalid coordinates!";
         return;
       }
-      const src = proj4('EPSG:4326');
-      const kand = proj4('EPSG:5235');
-      const sld  = proj4('EPSG:5234');
-      const utm  = proj4('EPSG:32644');
 
-      const kandXY = proj4(src, kand, [lonDD, latDD]);
-      const sldXY  = proj4(src, sld,  [lonDD, latDD]);
-      const utmXY  = proj4(src, utm,  [lonDD, latDD]);
+      let kandawalaCoords = proj4(kandawala, [lon, lat]);
+      let sld99Coords = proj4(sld99, [lon, lat]);
+      let utmCoords = proj4(utm44n, [lon, lat]);
 
-      const out = document.getElementById('out');
-      out.innerHTML = [
-        toOutLatLon('WGS84 Input', latDD, lonDD),
-        toOutCard('Kandawala / Sri Lanka Grid', kandXY[0], kandXY[1], 'EPSG:5235', latDD, lonDD),
-        toOutCard('SLD99 / Sri Lanka Grid 1999', sldXY[0], sldXY[1], 'EPSG:5234', latDD, lonDD),
-        toOutCard('UTM Zone 44N (WGS84)', utmXY[0], utmXY[1], 'EPSG:32644', latDD, lonDD)
-      ].join('');
+      let precision = document.querySelector('input[name="gr"]:checked').value;
+      let gr = makeGR(kandawalaCoords[0], kandawalaCoords[1], parseInt(precision));
 
-      out.querySelectorAll('.copy').forEach(btn=>{
-        btn.onclick = () => {
-          const text = btn.getAttribute('data-text');
-          navigator.clipboard.writeText(text).then(()=>{
-            btn.textContent = 'Copied!';
-            setTimeout(()=>btn.textContent='Copy', 1200);
-          });
-        };
-      });
+      let gmap = `https://www.google.com/maps?q=${lat},${lon}`;
+
+      document.getElementById("output").innerHTML = `
+        <b>Kandawala Grid:</b><br>
+        Easting: ${kandawalaCoords[0].toFixed(0)} m → ${gr.eastPart}<br>
+        Northing: ${kandawalaCoords[1].toFixed(0)} m → ${gr.northPart}<br>
+        Grid Reference (${precision}-figure): <b>${gr.gr}</b><br><br>
+
+        <b>SLD99 Grid:</b> E ${sld99Coords[0].toFixed(0)} m, N ${sld99Coords[1].toFixed(0)} m<br>
+        <b>UTM 44N:</b> E ${utmCoords[0].toFixed(0)} m, N ${utmCoords[1].toFixed(0)} m<br><br>
+
+        <a href="${gmap}" target="_blank">View on Google Maps</a>
+      `;
     }
-
-    function swap(){ alert('Swap is a placeholder. This demo focuses on Lat/Lon → Grid.'); }
-
-    document.getElementById('convert').addEventListener('click', convert);
-    document.getElementById('swap').addEventListener('click', swap);
   </script>
 </body>
 </html>
