@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sri Lanka Grid Converter</title>
+  <style>
+    :root { --bg:#0b1220; --card:#111a2e; --muted:#93a1b0; --text:#e6edf3; --accent:#5ab0ff; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1220,#0a0f1a);} 
+    .wrap{max-width:980px;margin:40px auto;padding:24px}
+    .card{background:var(--card);color:var(--text);border:1px solid #1f2a44;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .head{padding:18px 22px;border-bottom:1px solid #1f2a44;display:flex;align-items:center;gap:12px}
+    h1{font-size:20px;margin:0;font-weight:700}
+    .body{padding:22px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select,button,textarea{font:inherit} 
+    .grid{display:grid;gap:14px}
+    @media(min-width:720px){.grid-2{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:repeat(3,1fr)}}
+    .field{background:#0c1426;border:1px solid #223052;border-radius:12px;padding:10px 12px;color:var(--text)}
+    .row{display:flex;gap:10px;align-items:center}
+    .btn{background:var(--accent);color:#041423;border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .btn.secondary{background:#1b2a45;color:var(--text);border:1px solid #2a3b5f}
+    .note{font-size:12px;color:var(--muted)}
+    .result{background:#0c1426;border:1px dashed #2a3b5f;border-radius:12px;padding:12px}
+    .result .row{justify-content:space-between}
+    .tag{font-size:11px;color:#8fb7ff;background:#0e1b33;border:1px solid #234;
+         padding:2px 8px;border-radius:999px}
+    .copy{background:transparent;color:var(--accent);border:0;font-weight:700;cursor:pointer}
+    a{color:#7fc1ff}
+    .footer{color:var(--muted);font-size:12px;padding:18px 22px;border-top:1px solid #1f2a44}
+  </style>
+  <!-- proj4.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.min.js"></script>
+</head>
+<body>
+  <div class="wrap card">
+    <div class="head">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.39 4.84L20 8l-4 3.9.95 5.53L12 15.77 7.05 17.43 8 13 4 9l5.61-.16L12 2z" stroke="#5ab0ff"/></svg>
+      <h1>Sri Lanka Grid Converter</h1>
+    </div>
+    <div class="body">
+      <div class="grid grid-2">
+        <div>
+          <label>Latitude (accepts DD like <b>8.597475</b> or DMS like <b>8°35'50.91"N</b>)</label>
+          <input id="lat" class="field" placeholder="8.597475 or 8°35'50.91\"N" />
+        </div>
+        <div>
+          <label>Longitude (accepts DD like <b>80.483883</b> or DMS like <b>80°29'1.98"E</b>)</label>
+          <input id="lon" class="field" placeholder="80.483883 or 80°29'1.98\"E" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <button id="convert" class="btn">Convert</button>
+        <button id="swap" class="btn secondary" title="Swap input/output">Swap ↔</button>
+        <span class="note">WGS84 input → Kandawala (EPSG:5235) & SLD99 (EPSG:5234) & UTM 44N (EPSG:32644)</span>
+      </div>
+
+      <div id="out" style="margin-top:18px" class="grid grid-3"></div>
+
+      <details style="margin-top:18px">
+        <summary class="note">Parameters used (for accuracy & transparency)</summary>
+        <div class="note" style="margin-top:8px;line-height:1.5">
+          <b>Kandawala / Sri Lanka Grid — EPSG:5235</b>: Transverse Mercator; <code>+lat_0=7</code>, <code>+lon_0=80.7717133333</code>, <code>+k=0.9999238418</code>, <code>+x_0=200000</code>, <code>+y_0=200000</code>, Everest 1830 (1937 adj.), <code>+towgs84=-97,787,86,0,0,0,0</code>.
+          <br/>
+          <b>SLD99 / Sri Lanka Grid 1999 — EPSG:5234</b>: Transverse Mercator; same projection constants; GRS80 ellipsoid.
+          <br/>
+          <b>UTM 44N — EPSG:32644</b>: WGS84 UTM zone 44N.
+        </div>
+      </details>
+    </div>
+    <div class="footer">
+      Built with <a href="https://github.com/proj4js/proj4js">proj4js</a>. Copy or fork to GitHub and enable GitHub Pages to publish as a web app.
+    </div>
+  </div>
+
+  <script>
+    // --- CRS definitions ---
+    // EPSG:5235 — Kandawala / Sri Lanka Grid (Everest 1830 (1937 adj.))
+    proj4.defs("EPSG:5235",
+      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 " +
+      "+a=6377276.345 +rf=300.8017 +units=m +no_defs +towgs84=-97,787,86,0,0,0,0");
+
+    // EPSG:5234 — SLD99 / Sri Lanka Grid 1999 (GRS80/WGS84)
+    proj4.defs("EPSG:5234",
+      "+proj=tmerc +lat_0=7 +lon_0=80.77171333333333 +k=0.9999238418 +x_0=200000 +y_0=200000 " +
+      "+ellps=GRS80 +units=m +no_defs");
+
+    // EPSG:4326 — WGS84 geographic
+    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+
+    // EPSG:32644 — WGS84 / UTM zone 44N
+    proj4.defs("EPSG:32644", "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs");
+
+    // --- Helpers ---
+    function parseDMS(input){
+      if(!input) return NaN;
+      const s = String(input).trim();
+      // If looks like pure decimal
+      if(/^[-+]?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+      // Replace degree, minute, second symbols with spaces and N/S/E/W handling
+      const r = s
+        .replace(/°|º|deg/gi,' ')
+        .replace(/'/g,' ')
+        .replace(/"|”|″/g,' ')
+        .replace(/\s+/g,' ') // collapse
+        .trim();
+      const parts = r.match(/([-+]?\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)/);
+      const hemi = s.match(/[NSEW]/i);
+      if(!parts) return NaN;
+      let deg = parseFloat(parts[1]), min = parseFloat(parts[2]), sec = parseFloat(parts[3]);
+      let dd = Math.abs(deg) + (min/60) + (sec/3600);
+      if(deg < 0) dd *= -1; // keep explicit minus if provided
+      if(hemi){
+        const h = hemi[0].toUpperCase();
+        if(h==='S' || h==='W') dd = -Math.abs(dd);
+        if(h==='N' || h==='E') dd = Math.abs(dd);
+      }
+      return dd;
+    }
+
+    function fmt(n, decimals=0){
+      if(!isFinite(n)) return '—';
+      return n.toLocaleString(undefined,{maximumFractionDigits:decimals, minimumFractionDigits:decimals});
+    }
+
+    function toOutCard(title, x, y, tag){
+      const id = Math.random().toString(36).slice(2,8);
+      const html = `
+        <div class="result">
+          <div class="row"><strong>${title}</strong><span class="tag">${tag}</span></div>
+          <div class="row" style="margin-top:10px">
+            <div>Easting: <b>${fmt(x)}</b></div>
+            <button class="copy" data-text="${Math.round(x)} ${Math.round(y)}">Copy</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <div>Northing: <b>${fmt(y)}</b></div>
+            <button class="copy" data-text="${Math.round(y)}">Copy N</button>
+          </div>
+        </div>`;
+      return html;
+    }
+
+    function toOutLatLon(title, lat, lon){
+      const html = `
+        <div class="result">
+          <div class="row"><strong>${title}</strong><span class="tag">EPSG:4326</span></div>
+          <div class="row" style="margin-top:10px"><div>Lat: <b>${lat.toFixed(6)}</b></div>
+            <button class="copy" data-text="${lat.toFixed(6)}, ${lon.toFixed(6)}">Copy</button></div>
+          <div class="row" style="margin-top:6px"><div>Lon: <b>${lon.toFixed(6)}</b></div>
+            <button class="copy" data-text="${lon.toFixed(6)}">Copy Lon</button></div>
+        </div>`;
+      return html;
+    }
+
+    function convert(){
+      const latDD = parseDMS(document.getElementById('lat').value);
+      const lonDD = parseDMS(document.getElementById('lon').value);
+      if(!isFinite(latDD) || !isFinite(lonDD)){
+        alert('Please enter valid Latitude and Longitude (decimal or DMS).');
+        return;
+      }
+      const src = proj4('EPSG:4326');
+      const kand = proj4('EPSG:5235');
+      const sld  = proj4('EPSG:5234');
+      const utm  = proj4('EPSG:32644');
+
+      const kandXY = proj4(src, kand, [lonDD, latDD]);
+      const sldXY  = proj4(src, sld,  [lonDD, latDD]);
+      const utmXY  = proj4(src, utm,  [lonDD, latDD]);
+
+      const out = document.getElementById('out');
+      out.innerHTML = [
+        toOutLatLon('WGS84 Input', latDD, lonDD),
+        toOutCard('Kandawala / Sri Lanka Grid', kandXY[0], kandXY[1], 'EPSG:5235'),
+        toOutCard('SLD99 / Sri Lanka Grid 1999', sldXY[0], sldXY[1], 'EPSG:5234'),
+        toOutCard('UTM Zone 44N (WGS84)', utmXY[0], utmXY[1], 'EPSG:32644')
+      ].join('');
+
+      // attach copy handlers
+      out.querySelectorAll('.copy').forEach(btn=>{
+        btn.onclick = () => {
+          const text = btn.getAttribute('data-text');
+          navigator.clipboard.writeText(text).then(()=>{
+            btn.textContent = 'Copied!';
+            setTimeout(()=>btn.textContent='Copy', 1200);
+          });
+        };
+      });
+    }
+
+    function swap(){
+      // If output exists, try reading Kandawala numbers back to inputs (simple helper)
+      const e = document.querySelector('#out .result:nth-child(2)');
+      if(!e){return;}
+      alert('Swap is a placeholder here. This demo focuses on Lat/Lon → Grid.');
+    }
+
+    document.getElementById('convert').addEventListener('click', convert);
+    document.getElementById('swap').addEventListener('click', swap);
+  </script>
+</body>
+</html>
